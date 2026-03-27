@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>指板音暗記トレーニング</title>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --card: #161616;
+            --accent: #ffffff;
+            --error: #ff3e3e;
+            --success: #00ff88;
+            --text: #e0e0e0;
+            --dim: #666;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            width: 90%;
+            max-width: 450px;
+            background: var(--card);
+            padding: 40px;
+            border-radius: 2px;
+            border: 1px solid #333;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        h1 { font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--dim); margin-bottom: 40px; }
+        h2 { font-size: 20px; font-weight: 300; margin-bottom: 20px; letter-spacing: 0.1em; }
+        
+        /* 弦の配置：1弦が上、6弦が下 */
+        .fret-display {
+            display: flex;
+            flex-direction: column; 
+            gap: 12px;
+            margin: 30px 0;
+        }
+        .string-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #222;
+            padding-bottom: 6px;
+        }
+        .string-label { font-size: 11px; color: var(--dim); }
+        .note-name { font-size: 18px; font-weight: bold; color: var(--accent); }
+
+        .btn-group { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+        button {
+            background: none;
+            border: 1px solid #444;
+            color: var(--text);
+            padding: 16px;
+            font-size: 13px;
+            letter-spacing: 0.15em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        button:hover { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+        
+        .time-select-container { margin-bottom: 30px; }
+        .time-label { font-size: 10px; color: var(--dim); margin-bottom: 10px; display: block; letter-spacing: 0.1em; }
+        .time-select { display: flex; justify-content: center; gap: 8px; }
+        .time-btn { padding: 6px 12px; font-size: 11px; border-color: #333; min-width: 50px; }
+        .time-btn.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+        input {
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #444;
+            color: var(--accent);
+            font-size: 22px;
+            text-align: center;
+            width: 100%;
+            padding: 10px 0;
+            margin: 10px 0;
+            outline: none;
+            border-radius: 0;
+        }
+        input:focus { border-color: var(--accent); }
+
+        .hidden { display: none; }
+        .result-msg { font-size: 14px; margin: 20px 0; letter-spacing: 0.2em; font-weight: bold; }
+        .correct { color: var(--success); }
+        .incorrect { color: var(--error); }
+        
+        /* タイマーバー */
+        .timer-container { height: 2px; background: #222; width: 100%; margin-top: 20px; position: relative; overflow: hidden; }
+        .timer-bar { height: 100%; background: var(--success); width: 100%; position: absolute; left: 0; top: 0; }
+        .animate-bar { transition: width 7s linear; width: 0%; }
+    </style>
+</head>
+<body>
+
+<div class="container" id="app">
+    <div id="menu">
+        <h1>FRETBOARD MASTER</h1>
+        <div class="time-select-container">
+            <span class="time-label">暗記時間を選択</span>
+            <div class="time-select">
+                <button class="time-btn" onclick="setTime(0)">0秒</button>
+                <button class="time-btn" onclick="setTime(1)">1秒</button>
+                <button class="time-btn active" onclick="setTime(3)">3秒</button>
+                <button class="time-btn" onclick="setTime(5)">5秒</button>
+                <button class="time-btn" onclick="setTime(10)">10秒</button>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button onclick="startMode(1)">特定の弦を当てる</button>
+            <button onclick="startMode(2)">全弦一括で答える</button>
+            <button onclick="startMode(3)">フレット番号を当てる</button>
+            <button onclick="startMode(4)">フレットと音名を当てる</button>
+        </div>
+    </div>
+
+    <div id="study" class="hidden">
+        <h2 id="study-fret-num"></h2>
+        <div class="fret-display" id="study-list"></div>
+        <div class="result-msg" style="color: var(--dim);">暗記中...</div>
+    </div>
+
+    <div id="quiz" class="hidden">
+        <h2 id="quiz-header">問題</h2>
+        <div id="quiz-inputs"></div>
+        <div class="btn-group">
+            <button onclick="checkAnswer()">回答を送信</button>
+        </div>
+    </div>
+
+    <div id="result" class="hidden">
+        <div id="result-status" class="result-msg"></div>
+        <div id="answer-reveal" class="fret-display"></div>
+        <div id="timer-ui" class="hidden">
+            <div style="font-size: 10px; color: var(--dim); margin-bottom: 5px;">7秒後に次の問題へ進みます</div>
+            <div class="timer-container"><div id="bar" class="timer-bar"></div></div>
+        </div>
+        <div class="btn-group">
+            <button onclick="nextQuestion()">次の問題へ</button>
+            <button onclick="goHome()" style="border-color: #222; color: #666;">終了してトップへ</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const STRINGS = ["E", "B", "G", "D", "A", "E"]; 
+    const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    let studyTime = 3;
+    let currentMode = 0;
+    let currentFret = 0;
+    let targetString = 0;
+    let autoNextTimeout = null;
+
+    function setTime(s) {
+        studyTime = s;
+        document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+    }
+
+    function getNote(stringIdx, fret) {
+        let openNote = STRINGS[stringIdx];
+        let startIndex = NOTES.indexOf(openNote);
+        return NOTES[(startIndex + fret) % 12];
+    }
+
+    function showSection(id) {
+        ["menu", "study", "quiz", "result"].forEach(s => document.getElementById(s).classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+    }
+
+    function startMode(mode) {
+        currentMode = mode;
+        nextQuestion();
+    }
+
+    function nextQuestion() {
+        if(autoNextTimeout) clearTimeout(autoNextTimeout);
+        currentFret = Math.floor(Math.random() * 13);
+        
+        if (studyTime === 0 || currentMode === 3 || currentMode === 4) {
+            setupQuiz();
+        } else {
+            setupStudy();
+        }
+    }
+
+    function setupStudy() {
+        showSection('study');
+        document.getElementById('study-fret-num').innerText = `${currentFret} フレット`;
+        const list = document.getElementById('study-list');
+        list.innerHTML = "";
+        for (let i = 0; i < 6; i++) {
+            list.innerHTML += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${getNote(i, currentFret)}</span></div>`;
+        }
+        setTimeout(setupQuiz, studyTime * 1000);
+    }
+
+    function setupQuiz() {
+        showSection('quiz');
+        const header = document.getElementById('quiz-header');
+        const inputs = document.getElementById('quiz-inputs');
+        inputs.innerHTML = "";
+
+        if (currentMode === 1) {
+            targetString = Math.floor(Math.random() * 6) + 1;
+            header.innerText = `${currentFret}フレット / ${targetString}弦`;
+            inputs.innerHTML = `<input type="text" id="ans-0" placeholder="音名を入力 (例: C, F#)" autofocus autocomplete="off">`;
+        } else if (currentMode === 2) {
+            header.innerText = `${currentFret}フレットの全音`;
+            for (let i = 0; i < 6; i++) {
+                inputs.innerHTML += `<div class="string-row"><span class="string-label">${i+1}弦</span><input type="text" id="ans-${i}" style="width:120px; margin:0; font-size: 16px;"></div>`;
+            }
+        } else if (currentMode === 3) {
+            header.innerText = `この音の並びは何フレット？`;
+            let visibleCount = 3; // 固定
+            let indices = Array.from({length: 6}, (_, i) => i);
+            let visibleIndices = [];
+            for (let i = 0; i < visibleCount; i++) {
+                let randomIndex = Math.floor(Math.random() * indices.length);
+                visibleIndices.push(indices.splice(randomIndex, 1)[0]);
+            }
+            visibleIndices.sort(); // 昇順に並べ替え
+
+            let displayHtml = '<div class="fret-display" style="margin-bottom:20px;">';
+            for (let i = 0; i < 6; i++) {
+                displayHtml += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${visibleIndices.includes(i) ? getNote(i, currentFret) : "?"}</span></div>`;
+            }
+            inputs.innerHTML = displayHtml + '</div><input type="number" id="ans-fret" placeholder="フレット番号を入力">';
+        } else if (currentMode === 4) {
+            header.innerText = `フレットと隠された音名を当てる`;
+            // 隠す弦の数をランダムにする (2〜4本)
+            let hideCount = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
+            let visibleCount = 6 - hideCount;
+            let indices = Array.from({length: 6}, (_, i) => i);
+            let visibleIndices = [];
+            for (let i = 0; i < visibleCount; i++) {
+                let randomIndex = Math.floor(Math.random() * indices.length);
+                visibleIndices.push(indices.splice(randomIndex, 1)[0]);
+            }
+            visibleIndices.sort();
+
+            let displayHtml = '<div class="fret-display" style="margin-bottom:20px;">';
+            let inputHtml = '<input type="number" id="ans-fret" placeholder="フレット番号を入力" style="margin-bottom: 20px;">';
+            for (let i = 0; i < 6; i++) {
+                let isVisible = visibleIndices.includes(i);
+                displayHtml += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${isVisible ? getNote(i, currentFret) : "?"}</span></div>`;
+                if (!isVisible) {
+                    inputHtml += `<div class="string-row"><span class="string-label">${i+1}弦の音</span><input type="text" class="ans-remain" data-idx="${i}" style="width:120px; margin:0; font-size: 16px;"></div>`;
+                }
+            }
+            inputs.innerHTML = displayHtml + '</div>' + inputHtml;
+        }
+    }
+
+    function checkAnswer() {
+        let isCorrect = true;
+        // 入力補正（全角・小文字・フラットの簡易対応）
+        const normalize = (val) => val.trim().toUpperCase().replace('♯','#').replace('♭','B').replace('＃','#');
+
+        if (currentMode === 1) {
+            let val = normalize(document.getElementById('ans-0').value);
+            if (val !== getNote(targetString - 1, currentFret)) isCorrect = false;
+        } else if (currentMode === 2) {
+            for (let i = 0; i < 6; i++) {
+                let val = normalize(document.getElementById(`ans-${i}`).value);
+                if (val !== getNote(i, currentFret)) isCorrect = false;
+            }
+        } else if (currentMode === 3) {
+            let val = document.getElementById('ans-fret').value;
+            if (parseInt(val) !== currentFret) isCorrect = false;
+        } else if (currentMode === 4) {
+            // フレット番号の判定
+            let fretVal = document.getElementById('ans-fret').value;
+            if (parseInt(fretVal) !== currentFret) {
+                isCorrect = false;
+            } else {
+                // 隠された音名の判定
+                const remainInputs = document.querySelectorAll('.ans-remain');
+                for (let input of remainInputs) {
+                    let val = normalize(input.value);
+                    let idx = parseInt(input.dataset.idx);
+                    if (val !== getNote(idx, currentFret)) {
+                        isCorrect = false;
+                        break; // 1つでも間違えたら不正解
+                    }
+                }
+            }
+        }
+
+        showResult(isCorrect);
+    }
+
+    function showResult(isCorrect) {
+        showSection('result');
+        const status = document.getElementById('result-status');
+        const reveal = document.getElementById('answer-reveal');
+        const timerUI = document.getElementById('timer-ui');
+        const bar = document.getElementById('bar');
+        
+        reveal.innerHTML = "";
+        timerUI.classList.add('hidden');
+        bar.classList.remove('animate-bar');
+        void bar.offsetWidth; // リフロー強制
+
+        if (isCorrect) {
+            status.innerText = "正解";
+            status.className = "result-msg correct";
+            timerUI.classList.remove('hidden');
+            bar.classList.add('animate-bar');
+            autoNextTimeout = setTimeout(nextQuestion, 7000);
+        } else {
+            status.innerText = "不正解";
+            status.className = "result-msg incorrect";
+            let html = `<div style="color:var(--dim); font-size:10px; margin-bottom:10px;">正解: ${currentFret}フレット</div>`;
+            for (let i = 0; i < 6; i++) {
+                html += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${getNote(i, currentFret)}</span></div>`;
+            }
+            reveal.innerHTML = html;
+        }
+    }
+
+    function goHome() {
+        if(autoNextTimeout) clearTimeout(autoNextTimeout);
+        showSection('menu');
+    }
+</script>
+
+</body>
+</html>
