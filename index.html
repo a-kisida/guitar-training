@@ -38,7 +38,6 @@
         h1 { font-size: 12px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--dim); margin-bottom: 40px; }
         h2 { font-size: 20px; font-weight: 300; margin-bottom: 20px; letter-spacing: 0.1em; }
         
-        /* 弦の配置：1弦が上、6弦が下 */
         .fret-display {
             display: flex;
             flex-direction: column; 
@@ -94,7 +93,6 @@
         .correct { color: var(--success); }
         .incorrect { color: var(--error); }
         
-        /* タイマーバー */
         .timer-container { height: 2px; background: #222; width: 100%; margin-top: 20px; position: relative; overflow: hidden; }
         .timer-bar { height: 100%; background: var(--success); width: 100%; position: absolute; left: 0; top: 0; }
         .animate-bar { transition: width 7s linear; width: 0%; }
@@ -172,6 +170,23 @@
         return NOTES[(startIndex + fret) % 12];
     }
 
+    // 入力判定用の強化版ノーマライズ関数
+    function normalize(val) {
+        let n = val.trim().toUpperCase()
+            .replace('♯','#').replace('＃','#')
+            .replace('♭','B').replace('Ｂ','B');
+        
+        // 異名同音（フラット表記）をシャープ表記に変換
+        const enharmonics = {
+            'DB': 'C#',
+            'EB': 'D#',
+            'GB': 'F#',
+            'AB': 'G#',
+            'BB': 'A#'
+        };
+        return enharmonics[n] || n;
+    }
+
     function showSection(id) {
         ["menu", "study", "quiz", "result"].forEach(s => document.getElementById(s).classList.add('hidden'));
         document.getElementById(id).classList.remove('hidden');
@@ -185,7 +200,6 @@
     function nextQuestion() {
         if(autoNextTimeout) clearTimeout(autoNextTimeout);
         currentFret = Math.floor(Math.random() * 13);
-        
         if (studyTime === 0 || currentMode === 3 || currentMode === 4) {
             setupQuiz();
         } else {
@@ -213,7 +227,7 @@
         if (currentMode === 1) {
             targetString = Math.floor(Math.random() * 6) + 1;
             header.innerText = `${currentFret}フレット / ${targetString}弦`;
-            inputs.innerHTML = `<input type="text" id="ans-0" placeholder="音名を入力 (例: C, F#)" autofocus autocomplete="off">`;
+            inputs.innerHTML = `<input type="text" id="ans-0" placeholder="音名 (例: C, Eb)" autofocus autocomplete="off">`;
         } else if (currentMode === 2) {
             header.innerText = `${currentFret}フレットの全音`;
             for (let i = 0; i < 6; i++) {
@@ -221,35 +235,24 @@
             }
         } else if (currentMode === 3) {
             header.innerText = `この音の並びは何フレット？`;
-            let visibleCount = 3; // 固定
-            let indices = Array.from({length: 6}, (_, i) => i);
-            let visibleIndices = [];
-            for (let i = 0; i < visibleCount; i++) {
-                let randomIndex = Math.floor(Math.random() * indices.length);
-                visibleIndices.push(indices.splice(randomIndex, 1)[0]);
-            }
-            visibleIndices.sort(); // 昇順に並べ替え
-
+            let visible = [0, 2, 5].sort(() => Math.random() - 0.5);
             let displayHtml = '<div class="fret-display" style="margin-bottom:20px;">';
             for (let i = 0; i < 6; i++) {
-                displayHtml += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${visibleIndices.includes(i) ? getNote(i, currentFret) : "?"}</span></div>`;
+                displayHtml += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${visible.includes(i) ? getNote(i, currentFret) : "?"}</span></div>`;
             }
-            inputs.innerHTML = displayHtml + '</div><input type="number" id="ans-fret" placeholder="フレット番号を入力">';
+            inputs.innerHTML = displayHtml + '</div><input type="number" id="ans-fret" placeholder="フレット番号">';
         } else if (currentMode === 4) {
             header.innerText = `フレットと隠された音名を当てる`;
-            // 隠す弦の数をランダムにする (2〜4本)
-            let hideCount = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
-            let visibleCount = 6 - hideCount;
+            let hideCount = Math.floor(Math.random() * 3) + 2; 
             let indices = Array.from({length: 6}, (_, i) => i);
             let visibleIndices = [];
-            for (let i = 0; i < visibleCount; i++) {
+            for (let i = 0; i < (6 - hideCount); i++) {
                 let randomIndex = Math.floor(Math.random() * indices.length);
                 visibleIndices.push(indices.splice(randomIndex, 1)[0]);
             }
             visibleIndices.sort();
-
             let displayHtml = '<div class="fret-display" style="margin-bottom:20px;">';
-            let inputHtml = '<input type="number" id="ans-fret" placeholder="フレット番号を入力" style="margin-bottom: 20px;">';
+            let inputHtml = '<input type="number" id="ans-fret" placeholder="フレット番号" style="margin-bottom: 20px;">';
             for (let i = 0; i < 6; i++) {
                 let isVisible = visibleIndices.includes(i);
                 displayHtml += `<div class="string-row"><span class="string-label">${i+1}弦</span><span class="note-name">${isVisible ? getNote(i, currentFret) : "?"}</span></div>`;
@@ -263,39 +266,26 @@
 
     function checkAnswer() {
         let isCorrect = true;
-        // 入力補正（全角・小文字・フラットの簡易対応）
-        const normalize = (val) => val.trim().toUpperCase().replace('♯','#').replace('♭','B').replace('＃','#');
-
         if (currentMode === 1) {
-            let val = normalize(document.getElementById('ans-0').value);
-            if (val !== getNote(targetString - 1, currentFret)) isCorrect = false;
+            if (normalize(document.getElementById('ans-0').value) !== getNote(targetString - 1, currentFret)) isCorrect = false;
         } else if (currentMode === 2) {
             for (let i = 0; i < 6; i++) {
-                let val = normalize(document.getElementById(`ans-${i}`).value);
-                if (val !== getNote(i, currentFret)) isCorrect = false;
+                if (normalize(document.getElementById(`ans-${i}`).value) !== getNote(i, currentFret)) isCorrect = false;
             }
         } else if (currentMode === 3) {
-            let val = document.getElementById('ans-fret').value;
-            if (parseInt(val) !== currentFret) isCorrect = false;
+            if (parseInt(document.getElementById('ans-fret').value) !== currentFret) isCorrect = false;
         } else if (currentMode === 4) {
-            // フレット番号の判定
-            let fretVal = document.getElementById('ans-fret').value;
-            if (parseInt(fretVal) !== currentFret) {
+            if (parseInt(document.getElementById('ans-fret').value) !== currentFret) {
                 isCorrect = false;
             } else {
-                // 隠された音名の判定
                 const remainInputs = document.querySelectorAll('.ans-remain');
                 for (let input of remainInputs) {
-                    let val = normalize(input.value);
-                    let idx = parseInt(input.dataset.idx);
-                    if (val !== getNote(idx, currentFret)) {
-                        isCorrect = false;
-                        break; // 1つでも間違えたら不正解
+                    if (normalize(input.value) !== getNote(parseInt(input.dataset.idx), currentFret)) {
+                        isCorrect = false; break;
                     }
                 }
             }
         }
-
         showResult(isCorrect);
     }
 
@@ -305,12 +295,10 @@
         const reveal = document.getElementById('answer-reveal');
         const timerUI = document.getElementById('timer-ui');
         const bar = document.getElementById('bar');
-        
         reveal.innerHTML = "";
         timerUI.classList.add('hidden');
         bar.classList.remove('animate-bar');
-        void bar.offsetWidth; // リフロー強制
-
+        void bar.offsetWidth; 
         if (isCorrect) {
             status.innerText = "正解";
             status.className = "result-msg correct";
@@ -333,6 +321,5 @@
         showSection('menu');
     }
 </script>
-
 </body>
 </html>
